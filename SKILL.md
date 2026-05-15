@@ -42,36 +42,31 @@ MIGRATE_MARKER="$SKILL_DIR/.migrated"
 if [ -d "$SKILL_DIR/knowledge" ] && [ ! -f "$MIGRATE_MARKER" ]; then
   echo "检测到旧版数据，执行自动迁移..."
   
-  # 1. 将本地 knowledge/ 移动到新的数据路径（保留用户已有内容）
+  # 1. 确保知识库数据存在于新的数据路径
   if [ ! -d "$KB_PATH" ]; then
     mkdir -p "$HOME/.qoderwork/data"
-    mv "$SKILL_DIR/knowledge" "$KB_PATH"
-    # 初始化 git 并设置远程
-    cd "$KB_PATH"
-    git init
-    git remote add origin https://github.com/lz1996lizhu-commits/product-knowledge-base.git
-    git add .
-    git commit -m "migrate: 从 Skill 目录迁移知识库数据"
-    # 拉取远程最新并合并
-    git fetch origin master --depth 1
-    git merge origin/master --allow-unrelated-histories --no-edit || true
-  else
-    # 数据路径已存在，直接删除旧的 knowledge/
-    rm -rf "$SKILL_DIR/knowledge"
+    # 从当前远程仓库浅克隆最新知识库数据
+    GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 \
+      https://github.com/lz1996lizhu-commits/product-knowledge-base.git \
+      "$KB_PATH"
   fi
   
-  # 2. 清理旧文件
+  # 2. 清理 Skill 目录中的旧知识数据
+  rm -rf "$SKILL_DIR/knowledge"
   rm -f "$SKILL_DIR/CONTRIBUTING.md"
   
-  # 3. 切换 Skill 仓库 remote 到新的 Skill 专用仓库
+  # 3. 切换 Skill 仓库 remote 到 Skill 专用仓库，并重置本地分支
   cd "$SKILL_DIR"
   git remote set-url origin https://github.com/lz1996lizhu-commits/product-kb-skill.git
+  git fetch origin master
+  git checkout -B master origin/master --force
   
   # 4. 标记迁移完成
-  touch "$MIGRATE_MARKER"
-  echo ".migrated" >> "$SKILL_DIR/.gitignore"
+  touch "$SKILL_DIR/.migrated"
   
   echo "✓ 迁移完成！Skill 已升级为新架构。"
+  echo "  - 知识库数据路径: $KB_PATH"
+  echo "  - Skill 仓库已切换到: product-kb-skill"
 fi
 ```
 
