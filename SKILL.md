@@ -72,31 +72,32 @@ fi
 
 ## 知识库目录结构
 
-知识库文件存储在 `~/.product-knowledge-base/`：
+知识库文件存储在 `~/.product-knowledge-base/knowledge/`：
 
 ```
 product-knowledge-base/
-├── _index.md              # 主索引（分类+标题+标签+日期）
-├── _tags_index.md         # 标签倒排索引（检索性能关键）
+├── knowledge/             # 知识条目数据根目录
+│   ├── _index.md          # 主索引（分类+标题+标签+日期）
+│   ├── _tags_index.md     # 标签倒排索引（检索性能关键）
+│   ├── product/           # 产品功能
+│   │   ├── feature-xxx.md
+│   │   └── ...
+│   ├── business/          # 业务流程
+│   │   ├── process-xxx.md
+│   │   └── ...
+│   ├── faq/               # 常见问题
+│   │   ├── faq-xxx.md
+│   │   └── ...
+│   ├── guide/             # 操作指南
+│   │   ├── guide-xxx.md
+│   │   └── ...
+│   └── images/            # 图片资源（Git LFS 管理）
+│       ├── product/
+│       ├── business/
+│       ├── faq/
+│       └── guide/
 ├── CONTRIBUTING.md        # 协作贡献指南
-├── .gitattributes         # Git LFS 配置
-├── product/               # 产品功能
-│   ├── feature-xxx.md
-│   └── ...
-├── business/              # 业务流程
-│   ├── process-xxx.md
-│   └── ...
-├── faq/                   # 常见问题
-│   ├── faq-xxx.md
-│   └── ...
-├── guide/                 # 操作指南
-│   ├── guide-xxx.md
-│   └── ...
-└── images/                # 图片资源（Git LFS 管理）
-    ├── product/
-    ├── business/
-    ├── faq/
-    └── guide/
+└── .gitattributes         # Git LFS 配置
 ```
 
 ## 问答工作流
@@ -109,10 +110,10 @@ product-knowledge-base/
 
 ### Step 2：标签索引检索（优先）
 
-使用 Grep 工具在 `{KB_PATH}/_tags_index.md` 中搜索关键词：
+使用 Grep 工具在 `{KB_PATH}/knowledge/_tags_index.md` 中搜索关键词：
 
 ```
-Grep pattern="关键词" path="{KB_PATH}/_tags_index.md"
+Grep pattern="关键词" path="{KB_PATH}/knowledge/_tags_index.md"
 ```
 
 从匹配结果中获取关联文件路径列表。
@@ -122,32 +123,32 @@ Grep pattern="关键词" path="{KB_PATH}/_tags_index.md"
 仅读取匹配到的 **最相关的 1-3 个文件**（不要贪多）：
 
 ```
-Read file_path="{KB_PATH}/{matched_file_path}"
+Read file_path="{KB_PATH}/knowledge/{matched_file_path}"
 ```
 
 ### Step 4：Fallback（仅在 Step 2 未命中时）
 
-如果标签索引未命中任何结果，再读取 `{KB_PATH}/_index.md` 全量索引进行扫描匹配。
+如果标签索引未命中任何结果，再读取 `{KB_PATH}/knowledge/_index.md` 全量索引进行扫描匹配。
 
 ### Step 5：综合回答
 
 基于读取到的知识条目内容：
 - 组织清晰、准确的回答
 - 标注引用来源（文件名）
-- 如果知识库中无相关内容，明确告知用户并建议添加
+- 如果知识库中无相关内容，执行「知识缺口自动追踪」流程（见下文章节），自动提交 GitHub issue 并告知用户
 
 ### Step 6：展示来源
 
 回答末尾使用 `present_files` 工具展示引用的知识条目文件，让用户可以直接点击查看原始文档：
 
 ```
-present_files files=[{"file_path": "{KB_PATH}/product/feature-xxx.md"}]
+present_files files=[{"file_path": "{KB_PATH}/knowledge/product/feature-xxx.md"}]
 ```
 
 ### 回答规范
 
 - 优先基于知识库内容回答，引用具体条目
-- 如果知识库中无相关内容，明确告知并建议添加
+- 如果知识库中无相关内容，执行「知识缺口自动追踪」流程，自动提交 GitHub issue 记录该问题，同时告知用户未找到答案且已创建追踪工单
 - 保持回答简洁、准确、可操作
 
 ## 知识条目管理
@@ -157,9 +158,9 @@ present_files files=[{"file_path": "{KB_PATH}/product/feature-xxx.md"}]
 当用户说"添加知识"、"记录一下"、"新增条目"时：
 
 1. 确认分类（product/business/faq/guide）
-2. 使用模板创建新 Markdown 文件到 `{KB_PATH}/{category}/`
-3. 更新 `{KB_PATH}/_index.md` 索引
-4. 更新 `{KB_PATH}/_tags_index.md` 标签索引
+2. 使用模板创建新 Markdown 文件到 `{KB_PATH}/knowledge/{category}/`
+3. 更新 `{KB_PATH}/knowledge/_index.md` 索引
+4. 更新 `{KB_PATH}/knowledge/_tags_index.md` 标签索引
 5. 执行 git commit
 
 ### 条目文件模板
@@ -315,15 +316,94 @@ git checkout master || git checkout main
 ...
 ```
 
+## 知识缺口自动追踪（GitHub Issue）
+
+当用户在知识库中搜索后未获得明确答案时，本 Skill 自动向知识库仓库提交 GitHub issue，用于追踪和后续补充缺失知识。
+
+### 触发条件
+
+同时满足以下条件时执行：
+1. Step 2（标签索引检索）未命中任何结果
+2. Step 4（Fallback 全量索引扫描）仍未命中任何结果
+
+### Issue 提交流程
+
+```bash
+KB_PATH="$HOME/.product-knowledge-base"
+ISSUE_TITLE="[知识缺失] {用户问题摘要}"
+ISSUE_BODY="## 缺失知识描述
+
+{用户原始问题}
+
+## 搜索关键词
+
+- {关键词1}
+- {关键词2}
+- ...
+
+## 信息
+
+- 提交时间: $(date '+%Y-%m-%d %H:%M:%S')
+- 来源: QoderWork 产品知识库 Skill 自动检测
+
+## 建议
+
+请补充相关知识条目到知识库，完成后关闭此 issue。"
+
+# 切换到知识库仓库目录
+cd "$KB_PATH"
+
+# 提交 issue（使用 gh CLI）
+# 先尝试带标签提交，若标签不存在则降级为不带标签提交
+gh issue create \
+  --repo "lz1996lizhu-commits/product-knowledge-base" \
+  --title "$ISSUE_TITLE" \
+  --body "$ISSUE_BODY" \
+  --label "知识缺失" \
+|| gh issue create \
+  --repo "lz1996lizhu-commits/product-knowledge-base" \
+  --title "$ISSUE_TITLE" \
+  --body "$ISSUE_BODY"
+```
+
+### Issue 标题规范
+
+标题格式统一为：
+```
+[知识缺失] {用户问题的核心摘要（不超过30字）}
+```
+
+示例：
+- `[知识缺失] 如何配置 KPI 指标的权重规则`
+- `[知识缺失] 人才盘点流程中校准会的参与角色`
+
+### Issue 标签
+
+优先添加标签：`知识缺失`
+
+> 若仓库中不存在该标签，`gh` 不支持自动创建，将自动降级为不带标签提交。
+
+### 用户告知话术
+
+提交 issue 后，向用户回复：
+> 当前知识库中暂未找到与您问题相关的条目，我已自动在 GitHub 上创建了追踪 issue（#{issue_number}），团队会尽快补充相关知识。您可以关注该 issue 的进展，或手动添加知识条目。
+
+### 权限与失败处理
+
+- 需要 `gh` 已登录且对 `lz1996lizhu-commits/product-knowledge-base` 仓库有创建 issue 的权限
+- 若提交失败（网络问题、权限不足等），仅向用户告知"未找到答案，建议手动添加知识"，不阻塞后续对话
+- 如遇权限问题，输出提示：
+  > ⚠️ 自动提交 issue 失败，请联系 **李铸** 确认 GitHub 仓库权限配置。
+
 ## 环境依赖
 
 本 Skill 需要以下工具（首次使用时检查）：
 
 - **git**：版本管理（通常已预装）
-- **gh**（GitHub CLI）：用于创建 PR
+- **gh**（GitHub CLI）：用于创建 PR 和 Issue
 
 如果 `gh` 未安装，提示用户：
-> 需要安装 GitHub CLI 以支持 PR 创建。请访问 https://cli.github.com/ 安装，或运行：
+> 需要安装 GitHub CLI 以支持 PR 和 Issue 创建。请访问 https://cli.github.com/ 安装，或运行：
 > - Windows: `winget install GitHub.cli`
 > - macOS: `brew install gh`
 > - 安装后执行 `gh auth login` 完成认证
