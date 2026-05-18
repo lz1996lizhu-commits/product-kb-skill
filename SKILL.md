@@ -10,19 +10,44 @@
 
 ## 数据初始化（每次调用前执行）
 
-每次调用本 Skill 时，首先执行数据同步：
+每次调用本 Skill 时，首先执行智能数据同步。通过时间戳缓存避免不必要的网络请求，提升响应速度：
 
 ```bash
 KB_PATH="$HOME/.product-knowledge-base"
+SYNC_MARKER="$KB_PATH/.last_sync"
+SYNC_INTERVAL=28800  # 同步间隔：8小时（单位：秒）
 
-if [ ! -d "$KB_PATH" ]; then
-  # 首次使用：浅克隆知识库（不下载 LFS 图片二进制）
-  GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 \
-    https://github.com/lz1996lizhu-commits/product-knowledge-base.git \
-    "$KB_PATH"
+needs_sync=false
+
+if [ ! -d "$KB_PATH/.git" ]; then
+    # 首次使用：需要克隆
+    needs_sync=true
 else
-  # 增量同步：静默拉取最新内容
-  cd "$KB_PATH" && git pull origin master --depth 1 --no-edit 2>/dev/null || true
+    if [ ! -f "$SYNC_MARKER" ]; then
+        needs_sync=true
+    else
+        LAST_SYNC=$(cat "$SYNC_MARKER")
+        NOW=$(date +%s)
+        if [ $((NOW - LAST_SYNC)) -gt $SYNC_INTERVAL ]; then
+            needs_sync=true
+        fi
+    fi
+fi
+
+if [ "$needs_sync" = true ]; then
+    if [ ! -d "$KB_PATH" ]; then
+        # 首次使用：浅克隆知识库（不下载 LFS 图片二进制）
+        GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 \
+            https://github.com/lz1996lizhu-commits/product-knowledge-base.git \
+            "$KB_PATH"
+    else
+        # 增量同步：静默拉取最新内容
+        cd "$KB_PATH" && git pull origin master --depth 1 --no-edit 2>/dev/null || true
+    fi
+    # 更新同步时间戳
+    date +%s > "$SYNC_MARKER"
+else
+    echo "使用本地缓存（上次同步后8小时内不再重复拉取）"
 fi
 ```
 
@@ -104,29 +129,49 @@ product-knowledge-base/
 
 ### Step 1：提取关键词
 
-从用户问题中提取 2-5 个核心关键词/标签词。优先匹配产品术语、功能名称、业务概念。
+从用户问题中提取 2-5 个核心关键词/标签词。优先匹配产品术语、功能名称、业务概念。将关键词用 `|` 连接，形成组合检索表达式，例如：`关键词1|关键词2|关键词3`。
 
-### Step 2：标签索引检索（优先）
+### Step 2：并行混合检索（三路同时执行）
 
-使用 Grep 工具在 `{KB_PATH}/knowledge/_tags_index.md` 中搜索关键词：
+同时发起三路检索，最大化召回率：
+
+**路径 A — 标签倒排索引检索（权重最高）：**
 
 ```
-Grep pattern="关键词" path="{KB_PATH}/knowledge/_tags_index.md"
+Grep pattern="关键词1|关键词2|关键词3" path="{KB_PATH}/knowledge/_tags_index.md"
 ```
 
-从匹配结果中获取关联文件路径列表。
+**路径 B — 全文内容检索（覆盖标签未命中场景）：**
 
-### Step 3：读取相关文件
+```
+Grep pattern="关键词1|关键词2|关键词3" path="{KB_PATH}/knowledge" glob="*.md"
+```
 
-仅读取匹配到的 **最相关的 1-3 个文件**（不要贪多）：
+**路径 C — 主索引检索（兜底保障）：**
+
+```
+Grep pattern="关键词1|关键词2|关键词3" path="{KB_PATH}/knowledge/_index.md"
+```
+
+### Step 3：结果融合与排序
+
+收集三路检索结果后，按以下规则融合去重：
+
+1. **提取候选文件**：从各路径匹配结果中提取所有 `.md` 文件路径（排除 `_tags_index.md` 和 `_index.md` 本身）
+2. **打分排序**：
+   - 标签索引命中 → 权重 +3
+   - 全文内容命中 → 权重 +2
+   - 主索引命中 → 权重 +1
+   - 多关键词命中同一文件 → 累加计分
+3. **取 Top 3 文件**：按得分从高到低排序，取前 3 个最相关的文件（去重后不足 3 个则全部读取）
+
+### Step 4：读取相关文件
+
+读取排序后的 **最相关的 1-3 个文件**（不要贪多）：
 
 ```
 Read file_path="{KB_PATH}/knowledge/{matched_file_path}"
 ```
-
-### Step 4：Fallback（仅在 Step 2 未命中时）
-
-如果标签索引未命中任何结果，再读取 `{KB_PATH}/knowledge/_index.md` 全量索引进行扫描匹配。
 
 ### Step 5：综合回答
 
@@ -332,8 +377,8 @@ git checkout master || git checkout main
 ### 触发条件
 
 同时满足以下条件时执行：
-1. Step 2（标签索引检索）未命中任何结果
-2. Step 4（Fallback 全量索引扫描）仍未命中任何结果
+1. Step 2 三路并行检索（标签索引、全文内容、主索引）均未命中任何结果
+2. Step 3 结果融合后无任何候选文件
 
 ### Issue 提交流程
 
