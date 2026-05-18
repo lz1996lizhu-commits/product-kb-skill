@@ -13,42 +13,7 @@
 每次调用本 Skill 时，首先执行智能数据同步。通过时间戳缓存避免不必要的网络请求，提升响应速度：
 
 ```bash
-KB_PATH="$HOME/.product-knowledge-base"
-SYNC_MARKER="$KB_PATH/.last_sync"
-SYNC_INTERVAL=28800  # 同步间隔：8小时（单位：秒）
-
-needs_sync=false
-
-if [ ! -d "$KB_PATH/.git" ]; then
-    # 首次使用：需要克隆
-    needs_sync=true
-else
-    if [ ! -f "$SYNC_MARKER" ]; then
-        needs_sync=true
-    else
-        LAST_SYNC=$(cat "$SYNC_MARKER")
-        NOW=$(date +%s)
-        if [ $((NOW - LAST_SYNC)) -gt $SYNC_INTERVAL ]; then
-            needs_sync=true
-        fi
-    fi
-fi
-
-if [ "$needs_sync" = true ]; then
-    if [ ! -d "$KB_PATH" ]; then
-        # 首次使用：浅克隆知识库（不下载 LFS 图片二进制）
-        GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 \
-            https://github.com/lz1996lizhu-commits/product-knowledge-base.git \
-            "$KB_PATH"
-    else
-        # 增量同步：静默拉取最新内容
-        cd "$KB_PATH" && git pull origin master --depth 1 --no-edit 2>/dev/null || true
-    fi
-    # 更新同步时间戳
-    date +%s > "$SYNC_MARKER"
-else
-    echo "使用本地缓存（上次同步后8小时内不再重复拉取）"
-fi
+bash scripts/sync_kb.sh
 ```
 
 如果 clone 或 pull 失败（网络问题），检查本地是否已有数据：
@@ -60,39 +25,7 @@ fi
 如果检测到当前 Skill 目录下存在 `knowledge/` 子目录，说明是从旧版升级而来，执行迁移：
 
 ```bash
-SKILL_DIR="{当前Skill目录的绝对路径}"
-KB_PATH="$HOME/.product-knowledge-base"
-MIGRATE_MARKER="$SKILL_DIR/.migrated"
-
-if [ -d "$SKILL_DIR/knowledge" ] && [ ! -f "$MIGRATE_MARKER" ]; then
-  echo "检测到旧版数据，执行自动迁移..."
-  
-  # 1. 确保知识库数据存在于新的数据路径
-  if [ ! -d "$KB_PATH" ]; then
-    # 数据路径由 git clone 自动创建
-    # 从当前远程仓库浅克隆最新知识库数据
-    GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 \
-      https://github.com/lz1996lizhu-commits/product-knowledge-base.git \
-      "$KB_PATH"
-  fi
-  
-  # 2. 清理 Skill 目录中的旧知识数据
-  rm -rf "$SKILL_DIR/knowledge"
-  rm -f "$SKILL_DIR/CONTRIBUTING.md"
-  
-  # 3. 切换 Skill 仓库 remote 到 Skill 专用仓库，并重置本地分支
-  cd "$SKILL_DIR"
-  git remote set-url origin https://github.com/lz1996lizhu-commits/product-kb-skill.git
-  git fetch origin master
-  git checkout -B master origin/master --force
-  
-  # 4. 标记迁移完成
-  touch "$SKILL_DIR/.migrated"
-  
-  echo "✓ 迁移完成！Skill 已升级为新架构。"
-  echo "  - 知识库数据路径: $KB_PATH"
-  echo "  - Skill 仓库已切换到: product-kb-skill"
-fi
+bash scripts/migrate.sh
 ```
 
 ## 知识库目录结构
@@ -282,28 +215,7 @@ updated: YYYY-MM-DD
 操作对象为**知识库仓库**（`{KB_PATH}`），不是 Skill 目录：
 
 ```bash
-KB_PATH="$HOME/.product-knowledge-base"
-cd "$KB_PATH"
-
-# 1. 确保远程仓库已配置
-git remote get-url origin || git remote add origin https://github.com/lz1996lizhu-commits/product-knowledge-base.git
-
-# 2. 获取当前 git 用户名和日期，创建分支
-GIT_USER=$(git config user.name | tr ' ' '_')
-TODAY=$(date +%Y%m%d)
-BRANCH="task_${GIT_USER}_${TODAY}"
-
-# 3. 基于本地最新提交创建推送分支
-git checkout -b "$BRANCH"
-
-# 4. 推送分支到远程
-git push -u origin "$BRANCH"
-
-# 5. 创建 PR 到 master 分支
-gh pr create --base master --head "$BRANCH" --title "$BRANCH" --body "知识库更新"
-
-# 6. 推送完成后切回 main/master 分支
-git checkout master || git checkout main
+bash scripts/push_kb.sh
 ```
 
 如果推送失败报权限错误，输出提示：
@@ -383,9 +295,8 @@ git checkout master || git checkout main
 ### Issue 提交流程
 
 ```bash
-KB_PATH="$HOME/.product-knowledge-base"
-ISSUE_TITLE="[知识缺失] {用户问题摘要}"
-ISSUE_BODY="## 缺失知识描述
+export ISSUE_TITLE="[知识缺失] {用户问题摘要}"
+export ISSUE_BODY="## 缺失知识描述
 
 {用户原始问题}
 
@@ -404,20 +315,7 @@ ISSUE_BODY="## 缺失知识描述
 
 请补充相关知识条目到知识库，完成后关闭此 issue。"
 
-# 切换到知识库仓库目录
-cd "$KB_PATH"
-
-# 提交 issue（使用 gh CLI）
-# 先尝试带标签提交，若标签不存在则降级为不带标签提交
-gh issue create \
-  --repo "lz1996lizhu-commits/product-knowledge-base" \
-  --title "$ISSUE_TITLE" \
-  --body "$ISSUE_BODY" \
-  --label "知识缺失" \
-|| gh issue create \
-  --repo "lz1996lizhu-commits/product-knowledge-base" \
-  --title "$ISSUE_TITLE" \
-  --body "$ISSUE_BODY"
+bash scripts/create_issue.sh
 ```
 
 ### Issue 标题规范
