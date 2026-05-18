@@ -91,11 +91,9 @@ product-knowledge-base/
 │   ├── guide/             # 操作指南
 │   │   ├── guide-xxx.md
 │   │   └── ...
-│   └── images/            # 图片资源（Git LFS 管理）
-│       ├── product/
-│       ├── business/
-│       ├── faq/
-│       └── guide/
+│   └── images/            # 图片资源统一存放目录（Git LFS 管理）
+│       ├── xxx.png        # 所有知识条目的配图统一放在此目录下
+│       └── ...
 ├── CONTRIBUTING.md        # 协作贡献指南
 └── .gitattributes         # Git LFS 配置
 ```
@@ -159,9 +157,10 @@ present_files files=[{"file_path": "{KB_PATH}/knowledge/product/feature-xxx.md"}
 
 1. 确认分类（product/business/faq/guide）
 2. 使用模板创建新 Markdown 文件到 `{KB_PATH}/knowledge/{category}/`
-3. 更新 `{KB_PATH}/knowledge/_index.md` 索引
-4. 更新 `{KB_PATH}/knowledge/_tags_index.md` 标签索引
-5. 执行 git commit
+3. **图片处理**：如条目包含配图，将图片统一存放至 `{KB_PATH}/knowledge/images/`，并在 Markdown 中使用相对路径引用，如 `![描述](../images/xxx.png)`
+4. 更新 `{KB_PATH}/knowledge/_index.md` 索引
+5. 更新 `{KB_PATH}/knowledge/_tags_index.md` 标签索引
+6. 执行 git commit
 
 ### 条目文件模板
 
@@ -206,13 +205,23 @@ updated: YYYY-MM-DD
 3. 从 `_index.md` 和 `_tags_index.md` 移除条目
 4. 执行 git commit
 
-### 标签索引维护
+## 图片资源管理
 
-每次增删改条目后，自动更新 `_tags_index.md`：
+### 存放规则
 
-1. 读取被修改文件的 YAML frontmatter 中的 `tags` 字段
-2. 在 `_tags_index.md` 中添加/移除/更新对应标签下的文件路径
-3. 保持标签按首字符分组、文件路径按字母排序
+- **统一目录**：所有知识条目的配图必须统一存放在 `{KB_PATH}/knowledge/images/` 目录下，禁止在 `product/`、`business/`、`faq/`、`guide/` 等分类目录中创建子目录存放图片。
+- **路径引用**：Markdown 文件中使用相对路径引用图片：
+  - `product/`、`business/`、`faq/`、`guide/` 下的文件统一使用 `../images/xxx.png`
+- **命名规范**：尽量使用原始文件的有序命名（如截图工具生成的哈希名），避免中文文件名。
+- **重复处理**：若不同条目引用同一张图片（内容完全相同），只保留一份副本，多个条目共用同一图片路径。
+
+### 图片处理流程
+
+当用户补充的知识包含图片时：
+
+1. 将所有图片复制到 `{KB_PATH}/knowledge/images/`
+2. 在 Markdown 中将原始路径（如 `子目录/xxx.png`）替换为 `../images/xxx.png`
+3. 清理已迁移的原图片子目录
 
 ## Git 协作规范
 
