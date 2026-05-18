@@ -1,3 +1,7 @@
+---
+name: product-knowledge-base 
+description: 支持通过 Git 多人协作维护，用于业务咨询\功能匹配度分析\产品使用介绍\二开指导\应用问题提单
+---
 # 产品业务知识库
 
 ## 概述
