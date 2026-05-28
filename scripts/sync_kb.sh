@@ -60,3 +60,19 @@ if [ "$needs_sync" = true ]; then
 else
     echo "使用本地缓存（上次同步后8小时内不再重复拉取）"
 fi
+
+# 确保 Git LFS 管理的二进制文件（图片等）已下载
+# 无论同步还是缓存，都检查是否存在 LFS 指针文件（129字节左右的文本文件）
+if [ -d "$KB_PATH/.git" ]; then
+    LFS_MISSING=$(find "$KB_PATH/knowledge/images" -maxdepth 2 -type f \
+        \( -name "*.png" -o -name "*.jpg" -o -name "*.jpeg" -o -name "*.gif" \) \
+        -size -500c 2>/dev/null | head -1)
+    if [ -n "$LFS_MISSING" ]; then
+        if git lfs env &>/dev/null 2>&1; then
+            echo "检测到 LFS 图片未下载，正在拉取..."
+            cd "$KB_PATH" && git lfs pull 2>/dev/null
+        else
+            echo "⚠️ 检测到 LFS 指针文件，但未安装 Git LFS，图片可能无法显示"
+        fi
+    fi
+fi
