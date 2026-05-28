@@ -53,11 +53,13 @@ product-knowledge-base/
 │   ├── guide/             # 操作指南
 │   │   ├── guide-xxx.md
 │   │   └── ...
-│   └── images/            # 图片资源统一存放目录（Git LFS 管理）
+│   ├── spec/              # 测试用例规格
+│   │   ├── spec-xxx.md
+│   │   └── ...
+│   └── images/            # 图片资源统一存放目录
 │       ├── xxx.png        # 所有知识条目的配图统一放在此目录下
 │       └── ...
-├── CONTRIBUTING.md        # 协作贡献指南
-└── .gitattributes         # Git LFS 配置
+└── CONTRIBUTING.md        # 协作贡献指南
 ```
 
 ## 问答工作流
@@ -137,7 +139,7 @@ present_files files=[{"file_path": "{KB_PATH}/knowledge/product/feature-xxx.md"}
 
 当用户说"添加知识"、"记录一下"、"新增条目"时：
 
-1. 确认分类（product/business/faq/guide）
+1. 确认分类（product/business/faq/guide/spec）
 2. 使用模板创建新 Markdown 文件到 `{KB_PATH}/knowledge/{category}/`
 3. **图片处理**：如条目包含配图，将图片统一存放至 `{KB_PATH}/knowledge/images/`，并在 Markdown 中使用相对路径引用，如 `![描述](../images/xxx.png)`
 4. 更新 `{KB_PATH}/knowledge/_index.md` 索引
@@ -151,7 +153,7 @@ present_files files=[{"file_path": "{KB_PATH}/knowledge/product/feature-xxx.md"}
 ```markdown
 ---
 title: 条目标题
-category: product | business | faq | guide
+category: product | business | faq | guide | spec
 tags: [标签1, 标签2]
 author: 作者
 created: YYYY-MM-DD
@@ -191,9 +193,9 @@ updated: YYYY-MM-DD
 
 ### 存放规则
 
-- **统一目录**：所有知识条目的配图必须统一存放在 `{KB_PATH}/knowledge/images/` 目录下，禁止在 `product/`、`business/`、`faq/`、`guide/` 等分类目录中创建子目录存放图片。
+- **统一目录**：所有知识条目的配图必须统一存放在 `{KB_PATH}/knowledge/images/` 目录下，禁止在 `product/`、`business/`、`faq/`、`guide/`、`spec/` 等分类目录中创建子目录存放图片。
 - **路径引用**：Markdown 文件中使用相对路径引用图片：
-  - `product/`、`business/`、`faq/`、`guide/` 下的文件统一使用 `../images/xxx.png`
+  - `product/`、`business/`、`faq/`、`guide/`、`spec/` 下的文件统一使用 `../images/xxx.png`
 - **命名规范**：尽量使用原始文件的有序命名（如截图工具生成的哈希名），避免中文文件名。
 - **重复处理**：若不同条目引用同一张图片（内容完全相同），只保留一份副本，多个条目共用同一图片路径。
 
@@ -241,7 +243,7 @@ bash scripts/push_kb.sh
 1. Skill 调用时自动 git pull 同步知识库最新
 2. 在本地知识库中添加/修改知识条目
 3. 更新双索引文件，提交变更
-4. 创建 `task_{用户名}_{日期}` 分支，推送并提 PR 到 master
+4. 创建 `task_{用户名}_{日期}_{时间}` 分支，推送并提 PR 到 master
 5. 团队 review 后合并
 6. 其他人下次调用 Skill 时自动 pull 到最新
 
@@ -264,6 +266,9 @@ bash scripts/push_kb.sh
 ...
 
 ## 操作指南 (guide)
+...
+
+## 测试用例规格 (spec)
 ...
 ```
 
