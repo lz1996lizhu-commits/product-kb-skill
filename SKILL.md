@@ -291,6 +291,26 @@ bash scripts/push_kb.sh
 ...
 ```
 
+### 索引重建工具
+
+当索引与实际条目不一致时（如批量导入、手工编辑后遗漏更新索引），可使用重建脚本从所有条目的 frontmatter 重新生成双索引：
+
+```bash
+# 重建并写入（覆盖现有索引文件）
+bash scripts/rebuild_index.sh
+
+# 仅预览不写入（用于对比检查）
+bash scripts/rebuild_index.sh --dry-run
+```
+
+脚本逻辑：遍历 `knowledge/` 下所有分类目录中的 `.md` 文件 → 解析 YAML frontmatter（title/category/tags/updated/test_case_count）→ 按分类生成 `_index.md` 表格 → 按标签首字符分组生成 `_tags_index.md` 倒排索引。
+
+**推荐使用场景**：
+
+- 批量导入条目后一次性重建
+- 检测到检索结果与预期不符时作为修复工具
+- 定期运行以确保索引一致性
+
 ## 知识缺口自动追踪（GitHub Issue）
 
 当用户在知识库中搜索后未获得明确答案时，本 Skill 自动向知识库仓库提交 GitHub issue，用于追踪和后续补充缺失知识。
