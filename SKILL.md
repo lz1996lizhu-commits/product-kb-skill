@@ -70,41 +70,57 @@ product-knowledge-base/
 
 从用户问题中提取 2-5 个核心关键词/标签词。优先匹配产品术语、功能名称、业务概念。将关键词用 `|` 连接，形成组合检索表达式，例如：`关键词1|关键词2|关键词3`。
 
-### Step 2：并行混合检索（三路同时执行）
+### Step 2：阶段一 — 索引检索（双路并行）
 
-同时发起三路检索，最大化召回率：
+同时发起两路索引检索，快速锁定候选范围：
 
 **路径 A — 标签倒排索引检索（权重最高）：**
 
 ```
-Grep pattern="关键词1|关键词2|关键词3" path="{KB_PATH}/knowledge/_tags_index.md"
+Grep pattern="关键词1|关键词2|关键词3" path="{KB_PATH}/knowledge/_tags_index.md" output_mode="content"
 ```
 
-**路径 B — 全文内容检索（覆盖标签未命中场景）：**
+**路径 B — 主索引检索：**
 
 ```
-Grep pattern="关键词1|关键词2|关键词3" path="{KB_PATH}/knowledge" glob="*.md"
+Grep pattern="关键词1|关键词2|关键词3" path="{KB_PATH}/knowledge/_index.md" output_mode="content"
 ```
 
-**路径 C — 主索引检索（兜底保障）：**
+从两路结果中提取所有候选 `.md` 文件路径（排除 `_tags_index.md` 和 `_index.md` 本身）。
+
+### Step 3：阶段二 — 定向全文检索（仅在阶段一候选不足时）
+
+如果阶段一获得的**去重候选文件 < 3 个**，执行定向全文检索补充候选：
+
+1. **推断目标分类**：根据用户问题中的关键词判断最可能的分类目录（product/business/faq/guide/spec），缩小检索范围。例如问题提到"绩效""考核"则优先搜索 `product/` 和 `business/`；提到"操作""配置"则优先搜索 `guide/`。
+
+2. **在目标分类目录下执行全文检索**，使用 `files_with_matches` 模式仅获取文件名（避免大量内容输出）：
 
 ```
-Grep pattern="关键词1|关键词2|关键词3" path="{KB_PATH}/knowledge/_index.md"
+Grep pattern="关键词1|关键词2|关键词3" path="{KB_PATH}/knowledge/{target_category}" glob="*.md" output_mode="files_with_matches"
 ```
 
-### Step 3：结果融合与排序
+3. 如果仍无法确定目标分类，则退回到全目录检索（同样仅取文件名）：
 
-收集三路检索结果后，按以下规则融合去重：
+```
+Grep pattern="关键词1|关键词2|关键词3" path="{KB_PATH}/knowledge" glob="*.md" output_mode="files_with_matches"
+```
 
-1. **提取候选文件**：从各路径匹配结果中提取所有 `.md` 文件路径（排除 `_tags_index.md` 和 `_index.md` 本身）
-2. **打分排序**：
-   - 标签索引命中 → 权重 +3
-   - 全文内容命中 → 权重 +2
-   - 主索引命中 → 权重 +1
-   - 多关键词命中同一文件 → 累加计分
-3. **取 Top 3 文件**：按得分从高到低排序，取前 3 个最相关的文件（去重后不足 3 个则全部读取）
+> **关键约束**：全文检索必须使用 `output_mode="files_with_matches"`，仅获取匹配文件路径列表，不输出匹配行内容，防止输出过大。
 
-### Step 4：读取相关文件
+### Step 4：结果融合与排序
+
+收集阶段一和阶段二的结果后，按以下规则融合去重：
+
+1. **打分排序**：
+   - 标签索引命中（路径 A）→ 权重 +3
+   - 主索引命中（路径 B）→ 权重 +2
+   - 全文检索命中（阶段二）→ 权重 +1
+   - 多路径命中同一文件 → 累加计分
+   - 多关键词命中同一文件 → 额外 +1
+2. **取 Top 3 文件**：按得分从高到低排序，取前 3 个最相关的文件（去重后不足 3 个则全部读取）
+
+### Step 5：读取相关文件
 
 读取排序后的 **最相关的 1-3 个文件**（不要贪多）：
 
@@ -112,14 +128,14 @@ Grep pattern="关键词1|关键词2|关键词3" path="{KB_PATH}/knowledge/_index
 Read file_path="{KB_PATH}/knowledge/{matched_file_path}"
 ```
 
-### Step 5：综合回答
+### Step 6：综合回答
 
 基于读取到的知识条目内容：
 - 组织清晰、准确的回答
 - 标注引用来源（文件名）
 - 如果知识库中无相关内容，执行「知识缺口自动追踪」流程（见下文章节），自动提交 GitHub issue 并告知用户
 
-### Step 6：展示来源
+### Step 7：展示来源
 
 回答末尾使用 `present_files` 工具展示引用的知识条目文件，让用户可以直接点击查看原始文档：
 
@@ -318,8 +334,9 @@ bash scripts/rebuild_index.sh --dry-run
 ### 触发条件
 
 同时满足以下条件时执行：
-1. Step 2 三路并行检索（标签索引、全文内容、主索引）均未命中任何结果
-2. Step 3 结果融合后无任何候选文件
+1. Step 2 阶段一索引检索（标签索引 + 主索引）未命中任何结果
+2. Step 3 阶段二定向全文检索仍未命中（或候选文件数 < 3 触发全文检索后仍无结果）
+3. Step 4 结果融合后无任何候选文件
 
 ### Issue 提交流程
 
