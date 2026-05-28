@@ -13,7 +13,7 @@ if [ -d "$SKILL_DIR/knowledge" ] && [ ! -f "$MIGRATE_MARKER" ]; then
   if [ ! -d "$KB_PATH" ]; then
     # 数据路径由 git clone 自动创建
     # 从当前远程仓库浅克隆最新知识库数据
-    GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 \
+    git clone --depth 1 \
       https://github.com/lz1996lizhu-commits/product-knowledge-base.git \
       "$KB_PATH"
   fi
