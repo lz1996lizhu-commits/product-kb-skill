@@ -45,7 +45,13 @@ if [ "$needs_sync" = true ]; then
         fi
     else
         # 增量同步：静默拉取最新内容
-        if cd "$KB_PATH" && git pull origin master --depth 1 --no-edit 2>/dev/null; then
+        cd "$KB_PATH" || { echo "⚠️ 无法进入知识库目录，使用本地缓存继续工作"; }
+        if git pull origin master --no-edit 2>/dev/null; then
+            # 常规拉取成功
+            SYNC_SUCCESS=true
+        elif git fetch origin master 2>/dev/null && git reset --hard FETCH_HEAD 2>/dev/null; then
+            # 降级策略：fetch + reset 处理历史分歧等异常场景
+            echo "ℹ️ 常规同步失败，已通过 fetch + reset 降级同步到远程最新内容"
             SYNC_SUCCESS=true
         else
             echo "⚠️ 同步失败，下次调用时将重试（使用本地缓存继续工作）"
