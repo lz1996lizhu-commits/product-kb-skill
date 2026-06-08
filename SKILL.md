@@ -41,6 +41,7 @@ product-knowledge-base/
 ├── knowledge/             # 知识条目数据根目录
 │   ├── _index.md          # 主索引（分类+标题+标签+日期）
 │   ├── _tags_index.md     # 标签倒排索引（检索性能关键）
+│   ├── _cloud_index.md    # 云索引（按产品族 人才发展云/目标绩效云/人才供应云 分组）
 │   ├── product/           # 产品功能
 │   │   ├── feature-xxx.md
 │   │   └── ...
@@ -73,6 +74,18 @@ product-knowledge-base/
 
 从用户问题中提取 2-5 个核心关键词/标签词。优先匹配产品术语、功能名称、业务概念。将关键词用 `|` 连接，形成组合检索表达式，例如：`关键词1|关键词2|关键词3`。
 
+**关键词抽取硬约束**：
+
+- **最小长度 ≥ 2**：单个关键词必须 ≥ 2 个字符（中文 ≥ 2 字、英文 ≥ 2 字母）。单字关键词（如「人」「表」「招」「绩」）必须丢弃，否则会因前缀误匹配把整段倒排索引拉进结果。
+- **停用词过滤**：剔除以下虚词/疑问词/泛义词后再组装表达式（仅当它们作为独立词出现时过滤）：
+  `的、是、在、和、与、或、了、吗、呢、怎么、如何、什么、为何、为什么、哪些、是否、能否、可以、请、问、说一下、介绍、说明、流程、配置、概述、整体、功能`。
+- **超级标签拒绝**：如果抽出的关键词正好是「模块级/通用级」标签（如 `spec`、`整体介绍`、`产品概述`、`基础配置`、`FAQ`、`产品功能`、`业务流程`、`常见问题`、`操作指南`、`测试用例规格`），必须替换为更具体的功能/业务名词后再检索；这些超级标签已在 `_tags_index.md` 中被 `rebuild_index.sh` 自动过滤，对它们做倒排检索得不到任何结果。
+- **大小写归一**：英文关键词统一转小写后再拼接表达式（倒排索引也已做 `tolower` 归一）。
+
+**云预筛（可选优化）**：
+
+如果用户问句明显指向某一产品族（出现「干部 / 职级 / 人才盘点 / 任职资格 / 能力素质 / 继任 / 认证组」→ 人才发展云；「绩效 / 考核 / 评估 / KPI / PBC / BSC / 校准 / 指标」→ 目标绩效云；「招聘 / 录用 / 候选人 / Offer / 直通车 / 面试」→ 人才供应云），可先 Grep `_cloud_index.md` 拿到该云下的全部文件清单，再把 Step 2 的候选范围与该清单做交集，能进一步压缩 noise。跨云或云无法判定时跳过此步。
+
 ### Step 2：阶段一 — 索引检索（双路并行）
 
 同时发起两路索引检索，快速锁定候选范围：
@@ -90,6 +103,14 @@ Grep pattern="关键词1|关键词2|关键词3" path="{KB_PATH}/knowledge/_index
 ```
 
 从两路结果中提取所有候选 `.md` 文件路径（排除 `_tags_index.md` 和 `_index.md` 本身）。
+
+**候选数控制（硬约束）**：
+
+- 如果**任意一路**索引检索（路径 A 或 路径 B）返回的去重候选文件数 **> 20**，说明关键词过宽，必须立即收窄：
+  1. 优先丢弃命中数最多、最泛化的那个关键词，或将其替换为更具体的同义词；
+  2. 若仍 > 20，则在阶段二（Step 3）把检索范围限定到推断出的单一分类目录（不再退回全目录全文检索）；
+  3. 若用户问句本身就很泛（如"绩效有哪些功能？"），按"分类导航"的方式回答——只读取该分类的 `_index.md` 表格部分给出列表式概览，**不要**强行读取 20+ 个文件。
+- 如果**单一关键词**在 `_tags_index.md` 里挂了 > 20 个文件，几乎可以肯定它是模块级标签（如「内部招聘」「职级评定」），不应作为检索关键词，应改为该模块下更具体的功能名（如「应聘许可」「资料复核」）。
 
 ### Step 3：阶段二 — 定向全文检索（仅在阶段一候选不足时）
 
@@ -158,12 +179,11 @@ present_files files=[{"file_path": "{KB_PATH}/knowledge/product/feature-xxx.md"}
 
 当用户说"添加知识"、"记录一下"、"新增条目"时：
 
-1. 确认分类（product/business/faq/guide/spec）
-2. 使用模板创建新 Markdown 文件到 `{KB_PATH}/knowledge/{category}/`
-3. **图片处理**：如条目包含配图，将图片存放至 `{KB_PATH}/knowledge/images/{category}/` 子目录下，并在 Markdown 中使用相对路径引用，如 `![描述](../images/product/xxx.png)`
-4. 更新 `{KB_PATH}/knowledge/_index.md` 索引
-5. 更新 `{KB_PATH}/knowledge/_tags_index.md` 标签索引
-6. 执行 git commit
+1. 确认分类（product/business/faq/guide/spec）与产品族（人才发展云 / 目标绩效云 / 人才供应云）
+2. 使用模板创建新 Markdown 文件到 `{KB_PATH}/knowledge/{category}/`，记得填入 `cloud` 与 `aliases` 字段
+3. **图片处理**：如条目包含配图，将图片统一存放至 `{KB_PATH}/knowledge/images/`，并在 Markdown 中使用相对路径引用，如 `![描述](../images/xxx.png)`
+4. 运行 `bash scripts/rebuild_index.sh` 一次性刷新 `_index.md` / `_tags_index.md` / `_cloud_index.md` 三个索引
+5. 执行 git commit
 
 ### 条目文件模板
 
@@ -173,7 +193,9 @@ present_files files=[{"file_path": "{KB_PATH}/knowledge/product/feature-xxx.md"}
 ---
 title: 条目标题
 category: product | business | faq | guide | spec
+cloud: 人才发展云 | 目标绩效云 | 人才供应云   # 产品族归属，参与 _cloud_index.md 分组
 tags: [标签1, 标签2]
+aliases: [同义词1, 同义词2]                    # 可选；rebuild_index.sh 会把它当作额外标签写入 _tags_index.md
 author: 作者
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
@@ -190,13 +212,18 @@ updated: YYYY-MM-DD
 - [相关条目1](../xxx/yyy.md)
 ```
 
+**字段约定**：
+
+- `cloud`：单值字符串。三大云之一；跨云或暂未归类时可留空（会落入 `_cloud_index.md` 的「未分类」段，建议尽快补齐）。
+- `aliases`：列表。写入用户口语 / 异名 / 历史名称（例如 "PBC" 的别名 "个人绩效承诺"）。`rebuild_index.sh` 会把每个 alias 当作一个额外标签插入到倒排索引，提高同义词召回率，但**不会**写入 `_index.md` 的标签列。空 `aliases: []` 是合法的占位写法。
+
 ### 更新条目
 
 当用户说"更新知识"、"修改条目"时：
 
 1. 通过标签索引定位目标条目
 2. 修改内容并更新 `updated` 日期
-3. 同步更新 `_index.md` 和 `_tags_index.md`
+3. 运行 `bash scripts/rebuild_index.sh` 同步刷新 `_index.md` / `_tags_index.md` / `_cloud_index.md`
 4. 执行 git commit
 
 ### 删除条目
@@ -205,7 +232,7 @@ updated: YYYY-MM-DD
 
 1. 确认要删除的条目
 2. 将文件移至回收站（不永久删除）
-3. 从 `_index.md` 和 `_tags_index.md` 移除条目
+3. 运行 `bash scripts/rebuild_index.sh` 同步刷新三个索引
 4. 执行 git commit
 
 ## 图片资源管理
@@ -318,9 +345,38 @@ bash scripts/push_kb.sh
 ...
 ```
 
+### 云索引 `_cloud_index.md`
+
+按产品族（人才发展云 / 目标绩效云 / 人才供应云）对所有条目重新分组的索引。文件来源是各条目 frontmatter 的 `cloud` 字段，由 `rebuild_index.sh` 自动生成。
+
+```markdown
+# 云索引（按产品族分组）
+
+## 人才发展云 （N 条）
+| 文件 | 标题 | 分类 | 更新日期 |
+|------|------|------|----------|
+| product/feature-cadre-management.md | 干部管理整体介绍 | product | 2026-05-29 |
+...
+
+## 目标绩效云 （N 条）
+...
+
+## 人才供应云 （N 条）
+...
+
+## 未分类 （N 条）
+> 这些条目的 frontmatter 缺少 cloud 字段，建议补齐以便加入云索引。
+...
+```
+
+**用途**：
+
+- 检索预筛：用户问句明显指向某一云时，先 Grep 该云段拿到候选文件，再走标签倒排，能在 287+ 文件库下进一步压缩 noise。
+- 一致性巡检：「未分类」段是 cloud 字段缺失的告警面板，新条目入库时一眼可见。
+
 ### 索引重建工具
 
-当索引与实际条目不一致时（如批量导入、手工编辑后遗漏更新索引），可使用重建脚本从所有条目的 frontmatter 重新生成双索引：
+当索引与实际条目不一致时（如批量导入、手工编辑后遗漏更新索引），可使用重建脚本从所有条目的 frontmatter 重新生成三个索引：
 
 ```bash
 # 重建并写入（覆盖现有索引文件）
@@ -330,13 +386,61 @@ bash scripts/rebuild_index.sh
 bash scripts/rebuild_index.sh --dry-run
 ```
 
-脚本逻辑：遍历 `knowledge/` 下所有分类目录中的 `.md` 文件 → 解析 YAML frontmatter（title/category/tags/updated/test_case_count）→ 按分类生成 `_index.md` 表格 → 按标签首字符分组生成 `_tags_index.md` 倒排索引。
+脚本逻辑：遍历 `knowledge/` 下所有分类目录中的 `.md` 文件 → 解析 YAML frontmatter（title / category / tags / cloud / aliases / updated / test_case_count）→ 按分类生成 `_index.md` 表格 → 把 `tags` 与 `aliases` 合并、tolower、过滤超级标签后按首字符分组生成 `_tags_index.md` → 按 `cloud` 字段分组生成 `_cloud_index.md`。运行结束会输出条目数、标签数、被过滤的超级标签命中次数、分类分布、云分布、含非空 aliases 的条目数等统计。
 
 **推荐使用场景**：
 
 - 批量导入条目后一次性重建
 - 检测到检索结果与预期不符时作为修复工具
 - 定期运行以确保索引一致性
+
+### spec 标签回填工具
+
+`scripts/backfill_spec_tags.py` 用于审计/补齐 spec 区文件的业务关键词标签。规则：把文件名 `spec-{云}-{模块}-{子模块}.md` 按 `-` 拆分（去掉 `spec` 前缀和 `.md` 后缀，过滤 `spec/功能规格/测试用例` 三个通用词），剩余词作为业务标签。若 frontmatter 现有 `tags` 缺少这些词，则**仅追加，不删除**。
+
+```bash
+# 预览（不写入），列出每个文件待补充的标签
+PYTHONIOENCODING=utf-8 python3 scripts/backfill_spec_tags.py --dry-run
+
+# 实际写入（幂等，重复运行无副作用）
+PYTHONIOENCODING=utf-8 python3 scripts/backfill_spec_tags.py
+```
+
+**推荐使用场景**：
+
+- 批量导入新的 spec 用例后一次性补齐
+- 周期性审计 spec 区命名 → 标签的一致性
+- 写入完成后建议接着运行 `rebuild_index.sh` 刷新双索引
+
+**安全约束**：仅识别内联 `tags: [...]` 格式（spec 区当前全部使用此格式）；多行 YAML 列表会被自动跳过，不会破坏。
+
+### 云字段回填工具
+
+`scripts/backfill_cloud_field.py` 用于为缺少 `cloud` 与 `aliases` 字段的旧条目批量补齐。规则按四级优先级推断：
+
+1. 文件名直接出现「人才发展云 / 目标绩效云 / 人才供应云」→ 取该值
+2. 现有 `tags` 中出现以上三个云名 → 取该值
+3. 关键词词典（标题 + 文件名 + tags 拼接小写串）匹配到对应云
+4. 仍命中不到 → 写空 `cloud:` 并在终端输出警告，等待人工补齐
+
+`aliases` 始终在缺失时写入空列表 `aliases: []`。已存在且非空的字段不会被覆盖（幂等）。
+
+```bash
+# 仅报告每个文件的推断结果，不修改
+PYTHONIOENCODING=utf-8 python3 scripts/backfill_cloud_field.py --report
+
+# 预览（不写入）
+PYTHONIOENCODING=utf-8 python3 scripts/backfill_cloud_field.py --dry-run
+
+# 实际写入（幂等，重复运行无副作用）
+PYTHONIOENCODING=utf-8 python3 scripts/backfill_cloud_field.py
+```
+
+**推荐使用场景**：
+
+- 引入 `cloud` / `aliases` 字段后，对存量条目做一次性回填
+- 周期性巡检：发现 `_cloud_index.md` 的「未分类」段长出新条目时手工或 CI 重跑
+- 写入完成后必须接着运行 `rebuild_index.sh` 才能让 `_cloud_index.md` 生效
 
 ## 知识缺口自动追踪（GitHub Issue）
 
