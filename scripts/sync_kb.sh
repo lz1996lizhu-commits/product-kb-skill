@@ -45,7 +45,13 @@ if [ "$needs_sync" = true ]; then
         fi
     else
         # 增量同步：静默拉取最新内容
-        if cd "$KB_PATH" && git pull origin master --depth 1 --no-edit 2>/dev/null; then
+        cd "$KB_PATH" || { echo "⚠️ 无法进入知识库目录，使用本地缓存继续工作"; }
+        if git pull origin master --no-edit 2>/dev/null; then
+            # 常规拉取成功
+            SYNC_SUCCESS=true
+        elif git fetch origin master 2>/dev/null && git reset --hard FETCH_HEAD 2>/dev/null; then
+            # 降级策略：fetch + reset 处理历史分歧等异常场景
+            echo "ℹ️ 常规同步失败，已通过 fetch + reset 降级同步到远程最新内容"
             SYNC_SUCCESS=true
         else
             echo "⚠️ 同步失败，下次调用时将重试（使用本地缓存继续工作）"
@@ -59,4 +65,20 @@ if [ "$needs_sync" = true ]; then
     fi
 else
     echo "使用本地缓存（上次同步后8小时内不再重复拉取）"
+fi
+
+# 确保 Git LFS 管理的二进制文件（图片等）已下载
+# 无论同步还是缓存，都检查是否存在 LFS 指针文件（129字节左右的文本文件）
+if [ -d "$KB_PATH/.git" ]; then
+    LFS_MISSING=$(find "$KB_PATH/knowledge/images" -maxdepth 2 -type f \
+        \( -name "*.png" -o -name "*.jpg" -o -name "*.jpeg" -o -name "*.gif" \) \
+        -size -500c 2>/dev/null | head -1)
+    if [ -n "$LFS_MISSING" ]; then
+        if git lfs env &>/dev/null 2>&1; then
+            echo "检测到 LFS 图片未下载，正在拉取..."
+            cd "$KB_PATH" && git lfs pull 2>/dev/null
+        else
+            echo "⚠️ 检测到 LFS 指针文件，但未安装 Git LFS，图片可能无法显示"
+        fi
+    fi
 fi
