@@ -1,0 +1,1 @@
+{"seed":"5574e50456f3410b9cdf39747872b6b5","skillId":1007,"skillName":"金蝶AIHR 人才绩效知识库","issuedAt":"2026-08-31 11:40:43","expireAt":"2026-09-30 11:40:43","baseUrl":"https://skills.kingdee.com/api","credentialFile":"~/.skillhub/credential","note":"SkillHub使用情况上报种子，由平台在下载时生成，供同目录的上报脚本读取。改动本文件不会改变上报行为（除baseUrl外的字段脚本都不读），要覆盖平台地址请设置环境变量SKILLHUB_BASE_URL。请勿将本文件提交到代码仓库。"}
